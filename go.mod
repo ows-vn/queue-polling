@@ -1,4 +1,4 @@
-module sqs-polling
+module queue-polling
 
 go 1.12
 
