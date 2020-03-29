@@ -1,7 +1,8 @@
-package main
+package squeue
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/sqs"
@@ -9,6 +10,8 @@ import (
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+type QueueMessage = sqs.Message
 
 func SetInterval(someFunc func(), milliseconds int, async bool) chan bool {
 	interval := time.Duration(milliseconds) * time.Millisecond
@@ -35,20 +38,16 @@ func SetInterval(someFunc func(), milliseconds int, async bool) chan bool {
 	return clear
 }
 
-type QueueMsg struct {
+type QueuePayload struct {
 	MsgType string      `json:"type"`
 	Payload interface{} `json:"data"`
 }
 
-func main() {
-	fmt.Println("hello world")
-}
-
 type Config struct {
-	queueUrls    []string
-	messagesSize int
-	messagesPool int
-	checkInteval int
+	QueueUrls    []string
+	MessagesSize int
+	MessagesPool int
+	CheckInteval int
 }
 
 type QueuePolling struct {
@@ -59,21 +58,23 @@ type QueuePolling struct {
 }
 
 type QueueAction interface {
-	Push(*sqs.Message)
-	Run() []*sqs.Message
+	Push(*QueueMessage)
+	Run() []*QueueMessage
 }
 
 func NewPool(config Config) *QueuePolling {
-	queue := NewSQS(config.messagesSize)
+	queue := NewSQS(config.MessagesSize)
 	return &QueuePolling{
-		config: config,
-		queue:  queue,
+		config:  config,
+		queue:   queue,
+		actions: map[string]QueueAction{},
+		process: []chan bool{},
 	}
 }
 
 func (p *QueuePolling) Start() {
 	go func() {
-		processing := SetInterval(p.Run, p.config.checkInteval, false)
+		processing := SetInterval(p.Run, p.config.CheckInteval, false)
 		p.process = append(p.process, processing)
 	}()
 }
@@ -98,6 +99,7 @@ func (p *QueuePolling) GetAction(name string) QueueAction {
 
 func (p *QueuePolling) QueueProcessor(receiveNumber int, url string, callback func([]*sqs.Message) []*sqs.Message) {
 	if p.queue == nil {
+		fmt.Fprintln(os.Stderr, "Not have queue")
 		return
 	}
 
@@ -142,7 +144,7 @@ func (p *QueuePolling) getDataCallback(recevied []*sqs.Message) []*sqs.Message {
 	retval := []*sqs.Message{}
 	actionChanged := map[string]QueueAction{}
 	for _, value := range recevied {
-		data := QueueMsg{}
+		data := QueuePayload{}
 		err := json.Unmarshal([]byte(*value.Body), &data)
 		if err != nil {
 			retval = append(retval, value)
@@ -171,8 +173,8 @@ func (p *QueuePolling) getDataCallback(recevied []*sqs.Message) []*sqs.Message {
 }
 
 func (p *QueuePolling) Run() {
-	numberReceive := p.config.messagesPool / p.config.messagesSize
-	for _, v := range p.config.queueUrls {
+	numberReceive := p.config.MessagesPool / p.config.MessagesSize
+	for _, v := range p.config.QueueUrls {
 		p.QueueProcessor(numberReceive, v, p.getDataCallback)
 	}
 }
