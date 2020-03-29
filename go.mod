@@ -1,4 +1,4 @@
-module queue-polling
+module github.com/ows-vn/queue-polling
 
 go 1.12
 
