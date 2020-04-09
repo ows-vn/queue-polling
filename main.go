@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	jsoniter "github.com/json-iterator/go"
 )
@@ -177,4 +178,10 @@ func (p *QueuePolling) Run() {
 	for _, v := range p.config.QueueUrls {
 		p.QueueProcessor(numberReceive, v, p.getDataCallback)
 	}
+}
+
+func AwsSession() *session.Session {
+	return session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
 }
