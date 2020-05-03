@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	jsoniter "github.com/json-iterator/go"
@@ -45,6 +46,7 @@ type QueuePayload struct {
 }
 
 type Config struct {
+	MainQueue    string
 	QueueUrls    []string
 	MessagesSize int
 	MessagesPool int
@@ -61,6 +63,7 @@ type QueuePolling struct {
 type QueueAction interface {
 	Push(*QueueMessage)
 	Run() []*QueueMessage
+	Handle(data interface{}) bool
 }
 
 func NewPool(config Config) *QueuePolling {
@@ -178,6 +181,33 @@ func (p *QueuePolling) Run() {
 	for _, v := range p.config.QueueUrls {
 		p.QueueProcessor(numberReceive, v, p.getDataCallback)
 	}
+}
+
+func (p *QueuePolling) StartPolling() {
+	go func() {
+		chnMessages := make(chan *sqs.Message, p.config.MessagesSize)
+		go p.queue.pollSqs(p.config.MainQueue, p.config.CheckInteval, chnMessages)
+
+		for msg := range chnMessages {
+			isDone := p.ProcessMessage(msg)
+			if isDone {
+				_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
+			}
+		}
+	}()
+}
+
+func (p *QueuePolling) ProcessMessage(msg *QueueMessage) bool {
+	data := QueuePayload{}
+	err := json.Unmarshal([]byte(*msg.Body), &data)
+	if err != nil {
+		return false
+	}
+	action := p.GetAction(data.MsgType)
+	if action == nil {
+		return false
+	}
+	return action.Handle(data.Payload)
 }
 
 func AwsSession() *session.Session {
