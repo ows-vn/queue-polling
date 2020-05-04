@@ -11,7 +11,10 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
+var (
+	json     = jsoniter.ConfigCompatibleWithStandardLibrary
+	maxRetry = 5
+)
 
 type QueueMessage = sqs.Message
 
@@ -54,10 +57,11 @@ type Config struct {
 }
 
 type QueuePolling struct {
-	config  Config
-	process []chan bool
-	actions map[string]QueueAction
-	queue   *SQS
+	config     Config
+	process    []chan bool
+	actions    map[string]QueueAction
+	failoutMsg map[string]int
+	queue      *SQS
 }
 
 type QueueAction interface {
@@ -69,10 +73,11 @@ type QueueAction interface {
 func NewPool(config Config) *QueuePolling {
 	queue := NewSQS(config.MessagesSize)
 	return &QueuePolling{
-		config:  config,
-		queue:   queue,
-		actions: map[string]QueueAction{},
-		process: []chan bool{},
+		config:     config,
+		queue:      queue,
+		actions:    map[string]QueueAction{},
+		process:    []chan bool{},
+		failoutMsg: map[string]int{},
 	}
 }
 
@@ -192,6 +197,21 @@ func (p *QueuePolling) StartPolling() {
 			isDone := p.ProcessMessage(msg)
 			if isDone {
 				_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
+				continue
+			}
+
+			//process failout msg, retry msg
+
+			counter, ok := p.failoutMsg[*msg.MessageId]
+			if ok {
+				if counter >= maxRetry {
+					println("will delete failouts msg")
+					_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
+					continue
+				}
+				p.failoutMsg[*msg.MessageId] = counter + 1
+			} else {
+				p.failoutMsg[*msg.MessageId] = 1
 			}
 		}
 	}()

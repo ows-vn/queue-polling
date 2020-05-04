@@ -51,6 +51,12 @@ func (c *SQS) pollSqs(url string, time int, chn chan<- *sqs.Message) {
 			QueueUrl:            &url,
 			MaxNumberOfMessages: aws.Int64(int64(c.size)),
 			WaitTimeSeconds:     aws.Int64(int64(time / 1000)),
+			AttributeNames: []*string{
+				aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
+			},
+			MessageAttributeNames: []*string{
+				aws.String(sqs.QueueAttributeNameAll),
+			},
 		})
 
 		if err != nil {
