@@ -199,20 +199,6 @@ func (p *QueuePolling) StartPolling() {
 				_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
 				continue
 			}
-
-			//process failout msg, retry msg
-
-			counter, ok := p.failoutMsg[*msg.MessageId]
-			if ok {
-				if counter >= maxRetry {
-					println("will delete failouts msg")
-					_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
-					continue
-				}
-				p.failoutMsg[*msg.MessageId] = counter + 1
-			} else {
-				p.failoutMsg[*msg.MessageId] = 1
-			}
 		}
 	}()
 }
