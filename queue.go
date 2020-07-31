@@ -60,7 +60,7 @@ func (c *SQS) pollSqs(url string, time int, chn chan<- *sqs.Message) {
 		})
 
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "error when receive message", err)
+			logger.Error("error when receive message", err)
 			continue
 		}
 
@@ -76,7 +76,7 @@ func (c *SQS) DeleteMessage(url, receiptHandle *string) error {
 		ReceiptHandle: receiptHandle,
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error when delete message from sqs: ", err)
+		logger.Error("error when delete message from sqs: ", err)
 		return err
 	}
 	return nil
@@ -88,7 +88,7 @@ func (c *SQS) DeleteBatchMessage(url *string, batch []*sqs.DeleteMessageBatchReq
 		QueueUrl: url,
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error when delete message from sqs: ", err)
+		logger.Error("error when delete message from sqs: ", err)
 		return err
 	}
 	return nil

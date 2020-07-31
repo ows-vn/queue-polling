@@ -1,19 +1,19 @@
 package squeue
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	jsoniter "github.com/json-iterator/go"
+	logrus "github.com/sirupsen/logrus"
 )
 
 var (
 	json     = jsoniter.ConfigCompatibleWithStandardLibrary
 	maxRetry = 5
+	logger   = logrus.StandardLogger().WithFields(logrus.Fields{"module": "sqs-polling"})
 )
 
 type QueueMessage = sqs.Message
@@ -108,7 +108,7 @@ func (p *QueuePolling) GetAction(name string) QueueAction {
 
 func (p *QueuePolling) QueueProcessor(receiveNumber int, url string, callback func([]*sqs.Message) []*sqs.Message) {
 	if p.queue == nil {
-		fmt.Fprintln(os.Stderr, "Not have queue")
+		logger.Error("Not have queue")
 		return
 	}
 
@@ -194,10 +194,10 @@ func (p *QueuePolling) StartPolling() {
 		go p.queue.pollSqs(p.config.MainQueue, p.config.CheckInteval, chnMessages)
 
 		for msg := range chnMessages {
+			logger.Debug("msg queue body: ", *msg.Body)
 			isDone := p.ProcessMessage(msg)
 			if isDone {
 				_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
-				continue
 			}
 		}
 	}()
