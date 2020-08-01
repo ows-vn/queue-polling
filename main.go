@@ -67,7 +67,7 @@ type QueuePolling struct {
 type QueueAction interface {
 	Push(*QueueMessage)
 	Run() []*QueueMessage
-	Handle(data interface{}) bool
+	Handle(data interface{}, msgId string) bool
 }
 
 func NewPool(config Config) *QueuePolling {
@@ -195,7 +195,7 @@ func (p *QueuePolling) StartPolling() {
 
 		for msg := range chnMessages {
 			logger.Debug("msg queue body: ", *msg.Body)
-			isDone := p.ProcessMessage(msg)
+			isDone := p.ProcessMessage(msg, *msg.MessageId)
 			if isDone {
 				_ = p.queue.DeleteMessage(aws.String(p.config.MainQueue), msg.ReceiptHandle)
 			}
@@ -203,17 +203,19 @@ func (p *QueuePolling) StartPolling() {
 	}()
 }
 
-func (p *QueuePolling) ProcessMessage(msg *QueueMessage) bool {
+func (p *QueuePolling) ProcessMessage(msg *QueueMessage, msgId string) bool {
 	data := QueuePayload{}
 	err := json.Unmarshal([]byte(*msg.Body), &data)
 	if err != nil {
-		return false
+		logger.Error("msg body is not valid")
+		return true
 	}
 	action := p.GetAction(data.MsgType)
 	if action == nil {
-		return false
+		logger.Error("type of message is wrong: ", action)
+		return true
 	}
-	return action.Handle(data.Payload)
+	return action.Handle(data.Payload, msgId)
 }
 
 func AwsSession() *session.Session {
